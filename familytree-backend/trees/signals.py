@@ -1,3 +1,4 @@
+"""Django-сигналы приложения trees. Подключаются в TreesConfig.ready()."""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 

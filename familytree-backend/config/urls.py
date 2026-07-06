@@ -1,8 +1,22 @@
+"""
+Корневая маршрутизация проекта.
+
+- /admin/ — стандартная Django-админка.
+- /api/schema/, /api/docs/, /api/redoc/ — OpenAPI-схема и Swagger/Redoc UI (drf-spectacular).
+- /api/auth/... — регистрация и логин (JWT).
+- /api/trees/... — FamilyTreeViewSet и NotificationViewSet подключены через DefaultRouter
+  (стандартный CRUD + @action-эндпоинты вроде full_tree, public, mark_read).
+- /api/trees/<tree_id>/persons/..., .../relationships/..., .../life-events/..., .../media/...
+  подключены вручную через path(), а не через роутер — эти вьюсеты (TreeScopedViewSet)
+  работают в контексте конкретного дерева (tree_id берётся из URL, а не из queryset).
+- /media/... и /dev/ — только при DEBUG=True (раздача файлов и dev-консоль).
+"""
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from trees.views import (
     FamilyTreeViewSet, PersonViewSet, RelationshipViewSet, LifeEventViewSet, NotificationViewSet, MediaViewSet,
 )
@@ -15,6 +29,12 @@ router.register(r'notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+
+    # OpenAPI-схема и её визуализация (Swagger UI / Redoc)
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+
     path('api/auth/register/', register),
     path('api/auth/login/', login),
     path('api/', include(router.urls)),

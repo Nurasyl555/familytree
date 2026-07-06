@@ -1,3 +1,4 @@
+"""Вьюхи приложения core."""
 from django.shortcuts import render
 
 

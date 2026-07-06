@@ -1,3 +1,5 @@
+"""Регистрация моделей trees в стандартной Django-админке (без кастомных ModelAdmin —
+достаточно базового CRUD для отладки и ручного администрирования)."""
 from django.contrib import admin
 from .models import FamilyTree, Person, Relationship, TreeMember, AuditLog, Invitation, LifeEvent, Media, Notification
 

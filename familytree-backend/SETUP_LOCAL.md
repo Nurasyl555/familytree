@@ -77,6 +77,10 @@ python manage.py runserver
 
 API будет доступен на `http://localhost:8000/api/...`, админка — на `http://localhost:8000/admin/`.
 
+**Swagger-документация** (drf-spectacular): `http://localhost:8000/api/docs/` — интерактивный Swagger UI со всеми эндпоинтами, можно жать "Try it out" прямо из браузера (для защищённых эндпоинтов — кнопка "Authorize" вверху, вставить `access`-токен). Redoc-версия (просто почитать) — `http://localhost:8000/api/redoc/`. Сырая OpenAPI-схема — `http://localhost:8000/api/schema/`.
+
+**Dev-консоль** (мини-HTML для ручного тестирования без Swagger/Postman): `http://localhost:8000/dev/` — регистрация/логин, создание дерева, добавление персон, инвайты, уведомления. Доступна только при `DEBUG=True`.
+
 CORS уже настроен на `http://localhost:3000` (см. `config/settings.py`) — это адрес, с которого фронтенд будет ходить в API при локальной разработке.
 
 ## Проверка, что всё работает

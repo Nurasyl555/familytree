@@ -1,3 +1,7 @@
+"""
+Модели приложения trees: деревья, участники с ролями, персоны, связи между ними,
+хронология жизни, медиа-галерея, журнал изменений, уведомления и инвайты.
+"""
 import uuid
 from django.db import models
 from django.contrib.auth import get_user_model
@@ -5,30 +9,39 @@ from users.models import CustomUser
 
 User = get_user_model()
 
+
 def generate_share_token():
+    """Генерирует случайный токен для FamilyTree.share_token (доступ по ссылке)."""
     return uuid.uuid4().hex
 
+
 class FamilyTree(models.Model):
+    """Семейное дерево — корневой объект, вокруг которого строится всё остальное
+    (persons, relationships, участники, инвайты, уведомления, история изменений)."""
     PRIVACY_CHOICES = [
         ('private', 'Закрытое'),
         ('link', 'По ссылке'),
         ('public', 'Открытое'),
     ]
 
-    owner = models.ForeignKey(User, on_delete=models.CASCADE)
+    owner = models.ForeignKey(User, on_delete=models.CASCADE)  # исторический "главный" владелец; реальные права — через TreeMember
     name = models.CharField(max_length=255)  # "Семья Сидоровых"
     privacy = models.CharField(max_length=10, choices=PRIVACY_CHOICES, default='private')
     # действует только когда privacy='link': кто угодно с этим токеном получает доступ на чтение
     share_token = models.CharField(max_length=64, unique=True, default=generate_share_token, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         indexes = [
             models.Index(fields=['owner', 'created_at']),
         ]
 
+
 class TreeMember(models.Model):
+    """Связь пользователь-дерево-роль. Основной источник правды о том, кто имеет
+    доступ к дереву и что ему разрешено (owner/editor могут писать, reader — только
+    читать). unique_together гарантирует ровно одну роль на пользователя в дереве."""
     tree = models.ForeignKey(FamilyTree, on_delete=models.CASCADE, related_name='members')
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='tree_memberships')
     role = models.CharField(max_length=20, choices=CustomUser.ROLES)
@@ -40,16 +53,19 @@ class TreeMember(models.Model):
             models.Index(fields=['user', 'tree']),
         ]
 
+
 class Person(models.Model):
+    """Один человек в дереве (предок/потомок/родственник). Анкетные поля жёстко
+    заданы для типовых случаев, extra_data — джокер для всего нестандартного."""
     tree = models.ForeignKey(FamilyTree, on_delete=models.CASCADE, related_name='persons')
     first_name = models.CharField(max_length=100)
     last_name = models.CharField(max_length=100)
     patronymic = models.CharField(max_length=100, blank=True)
-    
+
     birth_date = models.DateField(null=True, blank=True)
     death_date = models.DateField(null=True, blank=True)
     birth_place = models.CharField(max_length=255, blank=True)
-    
+
     bio = models.TextField(blank=True)  # воспоминания, заметки
     photo = models.ImageField(upload_to='persons/%Y/%m/', null=True, blank=True)
 
@@ -60,16 +76,21 @@ class Person(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         indexes = [
             models.Index(fields=['tree', 'created_at']),
         ]
-    
+
     def __str__(self):
+        """Человекочитаемое имя — используется в админке и логах."""
         return f"{self.first_name} {self.last_name}"
 
+
 class LifeEvent(models.Model):
+    """Одно событие в хронологии жизни персоны (окончил университет, переехал и т.п.)
+    с опциональным вложением (фото/скан документа). Отдельная таблица от Person —
+    подгружается лениво по требованию, а не вместе с основным графом дерева."""
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name='life_events')
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -84,6 +105,7 @@ class LifeEvent(models.Model):
         indexes = [
             models.Index(fields=['person', 'event_date']),
         ]
+
 
 class Media(models.Model):
     """Общая галерея архивных фото/сканов на персону — в отличие от Person.photo (одно
@@ -102,42 +124,52 @@ class Media(models.Model):
             models.Index(fields=['person', 'created_at']),
         ]
 
+
 class Relationship(models.Model):
+    """Направленное ребро графа родословной: person_from относится к person_to
+    как relationship_type (например, person_from — 'parent' для person_to).
+    Через эти рёбра строится и плоский граф (full_tree), и рекурсивная иерархия
+    (ancestors/descendants — см. PersonViewSet)."""
     RELATIONSHIP_TYPES = [
         ('parent', 'Родитель'),
         ('child', 'Ребёнок'),
         ('spouse', 'Супруг'),
         ('sibling', 'Брат/Сестра'),
     ]
-    
+
     tree = models.ForeignKey(FamilyTree, on_delete=models.CASCADE, related_name='relationships')
     person_from = models.ForeignKey(Person, on_delete=models.CASCADE, related_name='outgoing')
     person_to = models.ForeignKey(Person, on_delete=models.CASCADE, related_name='incoming')
     relationship_type = models.CharField(max_length=20, choices=RELATIONSHIP_TYPES)
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         unique_together = ('person_from', 'person_to', 'relationship_type')
         indexes = [
             models.Index(fields=['tree', 'person_from']),
         ]
 
+
 class AuditLog(models.Model):
+    """Журнал изменений: кто, что и когда поменял в дереве. Заполняется вручную
+    из вьюсетов (например, PersonViewSet.perform_create) и служит источником
+    для автоматической рассылки Notification (см. trees/signals.py)."""
     tree = models.ForeignKey(FamilyTree, on_delete=models.CASCADE, related_name='audit_logs')
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    
+
     action = models.CharField(max_length=50)  # 'create', 'update', 'delete'
     content_type = models.CharField(max_length=50)  # 'Person', 'Relationship'
     object_id = models.IntegerField()
     changes = models.JSONField(default=dict)  # {'field': {'old': ..., 'new': ...}}
-    
+
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     class Meta:
         indexes = [
             models.Index(fields=['tree', 'created_at']),
         ]
+
 
 class Notification(models.Model):
     """Уведомление участнику дерева о чужом изменении (создаётся автоматически сигналом
@@ -155,7 +187,11 @@ class Notification(models.Model):
             models.Index(fields=['user', 'is_read']),
         ]
 
+
 class Invitation(models.Model):
+    """Одноразовая ссылка-приглашение в дерево с заранее заданной ролью.
+    Создаётся FamilyTreeViewSet.generate_invite, активируется accept_invite,
+    после чего используется становится True (повторно не применяется)."""
     tree = models.ForeignKey(FamilyTree, on_delete=models.CASCADE)
     token = models.CharField(max_length=255, unique=True)
     role = models.CharField(max_length=20, choices=CustomUser.ROLES)

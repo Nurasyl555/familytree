@@ -49,11 +49,21 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+}
+
+# Swagger/OpenAPI-документация (drf-spectacular). Схема доступна на /api/schema/,
+# Swagger UI — на /api/docs/, Redoc — на /api/redoc/ (см. config/urls.py).
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'FamilyTree API',
+    'DESCRIPTION': 'REST API для цифрового архива семьи: деревья, персоны, связи, роли, инвайты, медиа и уведомления.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 # Application definition
@@ -67,7 +77,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Сторонние
     'rest_framework',
-    
+    'drf_spectacular',
+
     # Наши приложения
     'users.apps.UsersConfig',
     'trees.apps.TreesConfig',

@@ -1,3 +1,9 @@
+"""
+Вьюсеты приложения trees: деревья, участники, персоны, связи, хронология жизни,
+медиа-галерея и уведомления. Все эндпоинты защищены JWT-аутентификацией
+(DEFAULT_AUTHENTICATION_CLASSES в config/settings.py) и системой ролей TreeMember.
+"""
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -15,11 +21,21 @@ from django.core.mail import send_mail
 
 MAX_ANCESTRY_DEPTH = 50  # защита от зацикливания на случай кривых данных (A — родитель B и B — родитель A)
 
+
 def _fetch_ancestry_chain(tree, person, direction):
     """Обходит цепочку parent-связей одним рекурсивным SQL-запросом (WITH RECURSIVE),
     а не циклом в Python — иначе на каждое поколение уходил бы отдельный запрос.
-    direction: 'ancestors' — идти от person_to к person_from, 'descendants' — наоборот.
-    Возвращает [(person_id, depth), ...], depth=1 — родитель/ребёнок, depth=2 — дед/внук и т.д."""
+
+    Args:
+        tree: FamilyTree, в границах которого ищем связи (защита от утечки между деревьями).
+        person: Person, от которого строится цепочка.
+        direction: 'ancestors' — идти от person_to к person_from (вверх, к родителям),
+            'descendants' — в обратную сторону (вниз, к детям).
+
+    Returns:
+        Список кортежей [(person_id, depth), ...], depth=1 — родитель/ребёнок,
+        depth=2 — дед/внук и т.д. Глубина ограничена MAX_ANCESTRY_DEPTH.
+    """
     table = Relationship._meta.db_table
     if direction == 'ancestors':
         start_col, next_col = 'person_to_id', 'person_from_id'
@@ -45,8 +61,19 @@ def _fetch_ancestry_chain(tree, person, direction):
         cursor.execute(sql, [person.id, tree.id, tree.id, MAX_ANCESTRY_DEPTH])
         return cursor.fetchall()
 
+
 def _serialize_ancestry_chain(chain):
-    """chain -> список persons (одним запросом Person.objects.filter(id__in=...)) с добавленным полем depth."""
+    """Превращает результат _fetch_ancestry_chain в JSON-совместимый список.
+
+    Подтягивает все Person одним запросом (Person.objects.filter(id__in=...)),
+    а не по одному в цикле, и добавляет каждому элементу поле depth.
+
+    Args:
+        chain: список (person_id, depth), как возвращает _fetch_ancestry_chain.
+
+    Returns:
+        Список словарей PersonSerializer.data + ключ 'depth', отсортированный по depth.
+    """
     depth_by_id = dict(chain)
     persons = Person.objects.filter(id__in=depth_by_id.keys())
     data = PersonSerializer(persons, many=True).data
@@ -55,14 +82,38 @@ def _serialize_ancestry_chain(chain):
     data.sort(key=lambda item: item['depth'])
     return data
 
+
 def get_tree_role(tree, user):
-    """Роль пользователя как реального участника дерева (owner/editor/reader), либо None."""
+    """Возвращает роль пользователя как реального участника дерева.
+
+    Args:
+        tree: FamilyTree, для которого проверяется членство.
+        user: пользователь (обычно request.user).
+
+    Returns:
+        'owner' | 'editor' | 'reader', если пользователь состоит в TreeMember этого
+        дерева, иначе None (в т.ч. для анонимного/незалогиненного пользователя).
+    """
     membership = TreeMember.objects.filter(tree=tree, user=user).first()
     return membership.role if membership else None
 
+
 def has_privacy_read_access(tree, request):
-    """Доступ на чтение в обход членства — согласно privacy дерева.
-    Работает только для безопасных (GET/HEAD/OPTIONS) методов: privacy не даёт прав на запись."""
+    """Проверяет, даёт ли privacy дерева доступ на чтение в обход членства.
+
+    Работает только для безопасных методов (GET/HEAD/OPTIONS) — privacy никогда
+    не даёт прав на запись, это исключительно про видимость данных.
+
+    Args:
+        tree: FamilyTree, чья privacy проверяется.
+        request: текущий DRF-запрос (нужен метод и query-параметр share_token).
+
+    Returns:
+        True, если:
+        - tree.privacy == 'public' (видно любому авторизованному пользователю), или
+        - tree.privacy == 'link' и в запросе передан верный ?share_token=...
+        Иначе False.
+    """
     if request.method not in SAFE_METHODS:
         return False
     if tree.privacy == 'public':
@@ -71,27 +122,48 @@ def has_privacy_read_access(tree, request):
         return True
     return False
 
+
 class FamilyTreeViewSet(viewsets.ModelViewSet):
+    """CRUD для семейных деревьев + служебные действия (граф, история, инвайты).
+
+    Стандартные REST-методы (list/retrieve/create/update/partial_update/destroy)
+    подключены через DefaultRouter под префиксом /api/trees/.
+    """
     serializer_class = FamilyTreeDetailSerializer
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
-        # список деревьев не должен тянуть persons/relationships на каждое дерево (N+1) —
-        # для этого есть отдельный эндпоинт full_tree
+        """Для списка деревьев отдаёт лёгкий сериализатор без вложенных persons/relationships.
+
+        Без этого разделения GET /api/trees/ делал бы 2 лишних SQL-запроса на КАЖДОЕ
+        дерево в списке (N+1) — полный граф отдельного дерева и так доступен через
+        действие full_tree.
+        """
         if self.action == 'list':
             return FamilyTreeListSerializer
         return FamilyTreeDetailSerializer
 
     def get_queryset(self):
-        # деревья, где пользователь состоит участником (владелец/редактор/читатель) —
-        # это "мои деревья", а не общий каталог всех public-деревьев
+        """Возвращает деревья, где текущий пользователь состоит участником
+        (владелец/редактор/читатель) — это "мои деревья", а не общий каталог
+        всех public-деревьев (для каталога см. действие public)."""
+        if getattr(self, 'swagger_fake_view', False):
+            # во время генерации OpenAPI-схемы request.user не настоящий пользователь
+            return FamilyTree.objects.none()
         return FamilyTree.objects.filter(members__user=self.request.user).distinct()
 
     def _get_role(self, tree):
+        """Короткая обёртка над get_tree_role для текущего пользователя запроса."""
         return get_tree_role(tree, self.request.user)
 
     def get_object(self):
-        # шире, чем get_queryset: сюда же попадают public/link-деревья, где пользователь не участник
+        """Достаёт дерево по pk из URL с учётом privacy, а не только членства.
+
+        В отличие от get_queryset (который используется для списка "моих деревьев"),
+        сюда попадают и public/link-деревья, где пользователь не состоит участником —
+        именно этот метод используется в retrieve/update/destroy/full_tree/audit_log/
+        generate_invite, поэтому чтение публичных деревьев работает "из коробки".
+        """
         tree = get_object_or_404(FamilyTree, id=self.kwargs.get('pk'))
         if self._get_role(tree) is None and not has_privacy_read_access(tree, self.request):
             raise PermissionDenied('Нет доступа к этому дереву')
@@ -99,16 +171,19 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
         return tree
 
     def perform_create(self, serializer):
+        """Создаёт дерево и сразу делает создателя его владельцем (TreeMember role=owner)."""
         tree = serializer.save(owner=self.request.user)
         TreeMember.objects.create(tree=tree, user=self.request.user, role='owner')
 
     def update(self, request, *args, **kwargs):
+        """Изменение настроек дерева (name/privacy) — доступно только владельцу."""
         tree = self.get_object()
         if self._get_role(tree) != 'owner':
             return Response({'error': 'Только владелец может изменять настройки дерева'}, status=403)
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
+        """Удаление дерева (каскадно тянет persons/relationships/логи и т.д.) — только владелец."""
         tree = self.get_object()
         if self._get_role(tree) != 'owner':
             return Response({'error': 'Только владелец может удалить дерево'}, status=403)
@@ -124,8 +199,12 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def full_tree(self, request, pk=None):
-        """API эндпоинт: получить всё дерево для фронтенда (граф).
-        Доступно участникам, а также читателям public/link-дерева (get_object это учитывает)."""
+        """Отдаёт весь граф дерева (все persons + все relationships) для отрисовки на фронтенде.
+
+        Доступно участникам, а также читателям public/link-дерева — это учитывает
+        get_object(). Иерархия (кто чей предок) на бэкенде здесь не строится,
+        для этого есть отдельные ancestors/descendants у PersonViewSet.
+        """
         tree = self.get_object()
         persons = tree.persons.all()
         relationships = tree.relationships.all()
@@ -137,8 +216,11 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def audit_log(self, request, pk=None):
-        """История изменений — только для реальных участников дерева,
-        publiс/link-читателям без членства она не показывается."""
+        """Последние 100 записей журнала изменений дерева.
+
+        В отличие от full_tree, здесь privacy не даёт доступа — историю изменений
+        видят только реальные участники (TreeMember), даже если дерево публичное.
+        """
         tree = self.get_object()
         if self._get_role(tree) is None:
             raise PermissionDenied('История изменений доступна только участникам дерева')
@@ -147,7 +229,11 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def generate_invite(self, request, pk=None):
-        """Генерировать инвайт-ссылку"""
+        """Генерирует одноразовую инвайт-ссылку с заданной ролью (по умолчанию reader).
+
+        Доступно только владельцу дерева. Инвайт живёт 30 дней и активируется через
+        accept_invite; если передан email — дублируется письмом (send_mail).
+        """
         tree = self.get_object()
 
         if self._get_role(tree) != 'owner':
@@ -184,7 +270,11 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
     def accept_invite(self, request):
-        """Принять инвайт и добавиться в дерево"""
+        """Принимает инвайт по токену: создаёт/обновляет TreeMember текущего
+        пользователя с ролью из инвайта и помечает инвайт использованным.
+
+        Возвращает 400, если срок действия инвайта истёк.
+        """
         token = request.data.get('token')
         invitation = get_object_or_404(Invitation, token=token, used=False)
 
@@ -206,11 +296,24 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
             'role': invitation.role,
         })
 
+
 class TreeScopedViewSet(viewsets.ModelViewSet):
-    """Общая логика для вьюсетов, работающих внутри конкретного дерева (persons, relationships, life-events)."""
+    """Общая логика для вьюсетов, работающих внутри конкретного дерева
+    (persons, relationships, life-events, media). tree_id берётся из URL-кваргов —
+    эти вьюсеты подключены вручную через path(), а не через DefaultRouter."""
     permission_classes = [IsAuthenticated]
 
     def get_tree_and_role(self):
+        """Достаёт дерево по tree_id из URL и роль текущего пользователя в нём.
+
+        Returns:
+            Кортеж (tree, role), где role — 'owner'/'editor'/'reader' для реального
+            участника, либо None для read-доступа по privacy (public/link).
+
+        Raises:
+            PermissionDenied, если пользователь не участник и privacy не даёт
+            доступа на чтение (см. has_privacy_read_access).
+        """
         tree_id = self.kwargs.get('tree_id')
         tree = get_object_or_404(FamilyTree, id=tree_id)
         role = get_tree_role(tree, self.request.user)
@@ -219,19 +322,30 @@ class TreeScopedViewSet(viewsets.ModelViewSet):
         return tree, role
 
     def check_can_edit(self, role):
-        # role=None — это читатель по privacy (public/link), не участник дерева;
-        # ему, как и role='reader', писать нельзя
+        """Разрешает изменение данных только owner/editor.
+
+        role=None означает читателя по privacy (public/link), не участника дерева —
+        ему, как и role='reader', писать нельзя.
+        """
         if role not in ('owner', 'editor'):
             raise PermissionDenied('Недостаточно прав для изменения данных')
 
+
 class PersonViewSet(TreeScopedViewSet):
+    """CRUD для персон конкретного дерева + вычисление предков/потомков.
+
+    Подключён вручную под /api/trees/<tree_id>/persons/ (см. config/urls.py).
+    """
     serializer_class = PersonSerializer
 
     def get_queryset(self):
+        """Все персоны дерева из URL, доступного текущему пользователю."""
         tree, _ = self.get_tree_and_role()
         return Person.objects.filter(tree=tree)
 
     def perform_create(self, serializer):
+        """Создаёт персону, привязывает автора (created_by) и пишет запись в AuditLog
+        (на неё автоматически среагирует сигнал в signals.py и разошлёт уведомления)."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
 
@@ -247,11 +361,13 @@ class PersonViewSet(TreeScopedViewSet):
         )
 
     def perform_update(self, serializer):
+        """Обновление персоны — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         serializer.save()
 
     def perform_destroy(self, instance):
+        """Удаление персоны — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         instance.delete()
@@ -273,71 +389,96 @@ class PersonViewSet(TreeScopedViewSet):
         chain = _fetch_ancestry_chain(tree, person, 'descendants')
         return Response(_serialize_ancestry_chain(chain))
 
+
 class LifeEventViewSet(TreeScopedViewSet):
     """Хронология жизни персоны — отдельный эндпоинт, чтобы full_tree (граф)
-    оставался лёгким и не тянул события/вложения для каждого узла заранее."""
+    оставался лёгким и не тянул события/вложения для каждого узла заранее
+    (ленивая загрузка, п. 3.1 ТЗ)."""
     serializer_class = LifeEventSerializer
 
     def get_person(self, tree):
+        """Достаёт персону по person_id из URL, проверяя, что она принадлежит дереву."""
         return get_object_or_404(Person, id=self.kwargs.get('person_id'), tree=tree)
 
     def get_queryset(self):
+        """Все события жизни конкретной персоны."""
         tree, _ = self.get_tree_and_role()
         person = self.get_person(tree)
         return LifeEvent.objects.filter(person=person)
 
     def perform_create(self, serializer):
+        """Создаёт событие и привязывает автора — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         person = self.get_person(tree)
         serializer.save(person=person, created_by=self.request.user)
 
     def perform_update(self, serializer):
+        """Обновление события — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         serializer.save()
 
     def perform_destroy(self, instance):
+        """Удаление события — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         instance.delete()
 
+
 class MediaViewSet(TreeScopedViewSet):
-    """Общая галерея архивных фото/сканов персоны, не привязанных к конкретному LifeEvent.
-    Как и life-events — отдельный ленивый эндпоинт, не тянется в full_tree (п. 3.1 ТЗ)."""
+    """Общая галерея архивных фото/сканов персоны, не привязанных к конкретному LifeEvent
+    (в отличие от Person.photo — единственного основного фото). Как и life-events,
+    отдельный ленивый эндпоинт, не тянется в full_tree (п. 3.1 ТЗ)."""
     serializer_class = MediaSerializer
 
     def get_person(self, tree):
+        """Достаёт персону по person_id из URL, проверяя, что она принадлежит дереву."""
         return get_object_or_404(Person, id=self.kwargs.get('person_id'), tree=tree)
 
     def get_queryset(self):
+        """Все файлы галереи конкретной персоны."""
         tree, _ = self.get_tree_and_role()
         person = self.get_person(tree)
         return Media.objects.filter(person=person)
 
     def perform_create(self, serializer):
+        """Загружает файл в галерею и привязывает автора — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         person = self.get_person(tree)
         serializer.save(person=person, created_by=self.request.user)
 
     def perform_update(self, serializer):
+        """Обновление подписи/файла — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         serializer.save()
 
     def perform_destroy(self, instance):
+        """Удаление файла из галереи — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         instance.delete()
 
+
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
     """Уведомления пользователя обо всех деревьях сразу (не привязано к tree_id в URL) —
-    создаются автоматически сигналом на AuditLog, см. trees/signals.py."""
+    создаются автоматически сигналом на AuditLog, см. trees/signals.py.
+    Только чтение + два действия для пометки прочитанным (сама модель не редактируется
+    напрямую через API)."""
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        """Уведомления текущего пользователя, свежие сверху.
+
+        Поддерживает query-параметр ?unread=true для фильтрации только непрочитанных.
+        select_related('tree', 'audit_log') — чтобы не получить N+1 при сериализации
+        вложенного audit_log и tree_name на каждую строку списка.
+        """
+        if getattr(self, 'swagger_fake_view', False):
+            return Notification.objects.none()
         qs = Notification.objects.filter(user=self.request.user).select_related('tree', 'audit_log')
         if self.request.query_params.get('unread') == 'true':
             qs = qs.filter(is_read=False)
@@ -345,6 +486,7 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=['post'])
     def mark_read(self, request, pk=None):
+        """Помечает одно уведомление прочитанным."""
         notification = self.get_object()
         notification.is_read = True
         notification.save(update_fields=['is_read'])
@@ -352,27 +494,36 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['post'])
     def mark_all_read(self, request):
+        """Помечает прочитанными все непрочитанные уведомления пользователя разом.
+        Возвращает количество затронутых записей."""
         updated = Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
         return Response({'marked_read': updated})
 
+
 class RelationshipViewSet(TreeScopedViewSet):
+    """CRUD для связей между персонами конкретного дерева
+    (parent/child/spouse/sibling — направленное ребро person_from -> person_to)."""
     serializer_class = RelationshipSerializer
 
     def get_queryset(self):
+        """Все связи дерева из URL, доступного текущему пользователю."""
         tree, _ = self.get_tree_and_role()
         return Relationship.objects.filter(tree=tree)
 
     def perform_create(self, serializer):
+        """Создаёт связь — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         serializer.save(tree=tree)
 
     def perform_update(self, serializer):
+        """Обновление связи — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         serializer.save()
 
     def perform_destroy(self, instance):
+        """Удаление связи — только для owner/editor дерева."""
         tree, role = self.get_tree_and_role()
         self.check_can_edit(role)
         instance.delete()
