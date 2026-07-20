@@ -16,4 +16,8 @@ client.interceptors.request.use(config => {
     return config;
 });
 
+export function isNetworkError(error) {
+    return axios.isAxiosError(error) && !error.response;
+}
+
 export default client;

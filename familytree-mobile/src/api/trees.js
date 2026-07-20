@@ -6,3 +6,19 @@ export const fullTree          = (id)                  => client.get(`/trees/${i
 export const getTree           = (id)                  => client.get(`/trees/${id}/`).then(r => r.data);
 export const generateInvite    = (id, data)            => client.post(`/trees/${id}/generate_invite/`, data).then(r => r.data);
 export const updateTreePrivacy = (id, privacy)         => client.patch(`/trees/${id}/`, { privacy }).then(r => r.data);
+export const listMembers =
+  id =>
+    client.get(
+      `/trees/${id}/members/`
+    ).then(r => r.data);
+
+export const removeMember =
+  (id, userId) =>
+    client.delete(
+      `/trees/${id}/members/${userId}/`
+    );
+
+export const listTimeline = treeId =>
+  client
+    .get(`/trees/${treeId}/timeline/`)
+    .then(res => res.data);

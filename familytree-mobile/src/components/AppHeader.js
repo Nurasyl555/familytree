@@ -206,6 +206,7 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'web' ? 18 : 20,
     fontWeight: '700',
     color: '#232323',
+    fontFamily: 'Times',
   },
 
   badge: {
@@ -224,6 +225,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#444',
+    fontFamily: 'Times',
   },
 
   subtitle: {
@@ -234,6 +236,7 @@ const styles = StyleSheet.create({
     fontSize: Platform.OS === 'web' ? 13 : 12,
 
     flexShrink: 1,
+    fontFamily: 'Times',
 
     flexWrap:'wrap',
     
@@ -248,6 +251,7 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 15,
     fontWeight: '600',
+    fontFamily: 'Times',
     color: '#222',
 
     marginRight: 16,
@@ -270,6 +274,7 @@ const styles = StyleSheet.create({
   logoutText: {
     color: '#222',
     fontWeight: '600',
+    fontFamily: 'Times',
     fontSize: 14,
   },
 
@@ -288,6 +293,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     fontWeight: '600',
+    fontFamily: 'Times',
     color: '#222',
 
     maxWidth: 90,
@@ -308,5 +314,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 12,
+    fontFamily: 'Times',
   },
 });

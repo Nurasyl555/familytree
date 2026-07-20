@@ -41,12 +41,12 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,1
 # Раньше было захардкожено на localhost:3000/8000 — на реальном домене фронтенд не смог бы
 # достучаться до API (браузер блокировал бы запросы).
 CORS_ALLOWED_ORIGINS = [
-    o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:8000').split(',')
+    o.strip() for o in os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:8081,http://localhost:3000,http://localhost:8000').split(',')
     if o.strip()
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000').split(',') if o.strip()
+    o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost:8081,http://localhost:3000').split(',') if o.strip()
 ]
 
 REST_FRAMEWORK = {

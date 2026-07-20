@@ -254,6 +254,7 @@ const styles = StyleSheet.create({
       : 28,
 
     fontWeight: '700',
+    fontFamily: 'Times',
 
     color: colors.ink,
 
@@ -286,6 +287,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
 
     fontSize: 14,
+    fontFamily: 'Times',
   },
 
   list: {
@@ -299,6 +301,7 @@ const styles = StyleSheet.create({
     opacity: .5,
     color: colors.ink,
     fontSize: 15,
+    fontFamily: 'Times',
   },
 
 });
