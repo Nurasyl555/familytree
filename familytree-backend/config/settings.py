@@ -138,6 +138,10 @@ DATABASES = {
         'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST'),
         'PORT': os.environ.get('DB_PORT'),
+        # Neon требует SSL ('sslmode=require' в их connection string); локальный
+        # Postgres в docker-compose SSL не поддерживает, поэтому дефолт — 'prefer'
+        # (использует SSL, если сервер его предлагает, иначе работает как обычно).
+        'OPTIONS': {'sslmode': os.environ.get('DB_SSLMODE', 'prefer')},
     }
 }
 

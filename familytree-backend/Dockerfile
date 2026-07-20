@@ -22,6 +22,8 @@ RUN SECRET_KEY=build-time-placeholder python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-# Миграции гоняются при старте контейнера (см. docker-compose.yml command), не здесь —
-# на этапе build ещё нет доступа к базе данных.
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Миграции гоняются при старте контейнера, не здесь — на этапе build ещё нет доступа
+# к базе данных. Зашито прямо в CMD (exec-форма, sh -c от самого Docker) вместо
+# docker-compose.yml/Render Docker Command — текстовые поля некоторых платформ
+# (например, Render) не гарантируют корректный шелл-парсинг таких строк.
+CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"]
