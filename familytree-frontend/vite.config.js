@@ -5,6 +5,10 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // Задаётся только для деплоя под путём (напр. esg.kbtu.kz/familytree/, см. VITE_BASE_PATH
+  // build-arg во frontend/Dockerfile) — Vercel/Docker Compose/локальная разработка живут
+  // в корне домена, там переменная не задана и base остаётся '/'.
+  base: process.env.VITE_BASE_PATH || '/',
   server: {
     port: 3000,
     proxy: {

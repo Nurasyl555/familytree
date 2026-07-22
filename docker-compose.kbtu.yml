@@ -1,0 +1,77 @@
+# Compose-файл для сервера esg.kbtu.kz — по требованиям из их гайда по деплою:
+# префиксованные имена сервисов, никаких портов наружу (Public Nginx их сервера сам
+# достаёт нужный контейнер по имени через общую сеть esg-network), внутренний nginx.conf
+# работает так, будто проект в корне сайта (префикс "/familytree" добавляет только их
+# Public Nginx). Не путать с docker-compose.yml в корне — тот для локальной разработки,
+# оба файла можно использовать независимо друг от друга.
+#
+# Запуск на сервере (после того как девопсеры КБТУ создадут сеть esg-network и дадут доступ):
+#   docker compose -f docker-compose.kbtu.yml up -d --build
+#
+# Обязательно нужен familytree-backend/.env (см. .env.example) — ALLOWED_HOSTS и
+# CORS_ALLOWED_ORIGINS должны включать esg.kbtu.kz.
+
+services:
+  familytree-db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_DB: familytree
+      POSTGRES_USER: devuser
+      POSTGRES_PASSWORD: devpassword
+    expose:
+      - "5432"
+    volumes:
+      - familytree_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devuser -d familytree"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - familytree-internal
+
+  familytree-backend:
+    build: ./familytree-backend
+    restart: always
+    command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
+    env_file:
+      - ./familytree-backend/.env
+    environment:
+      DB_NAME: familytree
+      DB_USER: devuser
+      DB_PASSWORD: devpassword
+      DB_HOST: familytree-db
+      DB_PORT: 5432
+    expose:
+      - "8000"
+    volumes:
+      - familytree_media_data:/app/media
+    depends_on:
+      familytree-db:
+        condition: service_healthy
+    networks:
+      - familytree-internal
+
+  familytree-frontend:
+    build:
+      context: ./familytree-frontend
+      args:
+        VITE_BASE_PATH: /familytree/
+    restart: always
+    expose:
+      - "80"
+    depends_on:
+      - familytree-backend
+    networks:
+      - familytree-internal   # видит familytree-backend по имени (proxy_pass в nginx.conf)
+      - esg-network            # видна Public Nginx сервера КБТУ
+
+networks:
+  familytree-internal:
+  esg-network:
+    external: true
+
+volumes:
+  familytree_postgres_data:
+  familytree_media_data:

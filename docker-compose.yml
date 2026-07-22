@@ -1,5 +1,5 @@
 services:
-  db:
+  familytree-db:
     image: postgres:15
     container_name: ft_postgres
     restart: always
@@ -17,14 +17,7 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7
-    container_name: ft_redis
-    restart: always
-    ports:
-      - "6380:6379"
-
-  backend:
+  familytree-backend:
     build: ./familytree-backend
     container_name: ft_backend
     restart: always
@@ -32,32 +25,32 @@ services:
     command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
     # SECRET_KEY/DEBUG и остальное берутся из familytree-backend/.env (см. SETUP_LOCAL.md);
     # DB_*/ALLOWED_HOSTS ниже переопределяют его же значения — .env настроен под локальный
-    # Postgres на localhost, а тут бэкенд должен идти в контейнер db
+    # Postgres на localhost, а тут бэкенд должен идти в контейнер familytree-db
     env_file:
       - ./familytree-backend/.env
     environment:
       DB_NAME: familytree
       DB_USER: devuser
       DB_PASSWORD: devpassword
-      DB_HOST: db
+      DB_HOST: familytree-db
       DB_PORT: 5432
-      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,backend,frontend}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,familytree-backend,familytree-frontend}
     ports:
       - "8000:8000"
     volumes:
       - media_data:/app/media
     depends_on:
-      db:
+      familytree-db:
         condition: service_healthy
 
-  frontend:
+  familytree-frontend:
     build: ./familytree-frontend
     container_name: ft_frontend
     restart: always
     ports:
       - "3000:80"
     depends_on:
-      - backend
+      - familytree-backend
 
 volumes:
   postgres_data:
