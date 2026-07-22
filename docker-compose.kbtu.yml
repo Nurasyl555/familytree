@@ -34,6 +34,7 @@ services:
   familytree-backend:
     build: ./familytree-backend
     restart: always
+    container_name: familytree-backend
     command: sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000"
     env_file:
       - ./familytree-backend/.env
@@ -52,6 +53,7 @@ services:
         condition: service_healthy
     networks:
       - familytree-internal
+      - esg-network
 
   familytree-frontend:
     build:
