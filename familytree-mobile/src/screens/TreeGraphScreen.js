@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import AuditLogView from '../components/AuditLogView';
+import InviteManager from '../components/InviteManager';
+import TimelineView from '../components/TimelineView';
 import {
   View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Dimensions, Platform, ScrollView
@@ -97,7 +100,8 @@ export default function TreeGraphScreen({ route, navigation }) {
   const [loading, setLoading]   = useState(true);
   const [showAdd, setShowAdd]   = useState(false);
   const [saving, setSaving]     = useState(false);
-  const [activeTab, setActiveTab] = useState('members');
+  const [activeTab, setActiveTab] = useState('graph');
+  const [treePrivacy, setTreePrivacy] = useState('private');
   const { isOnline, pendingCount, syncing, refreshPendingCount } = useNetworkStatus();
 
   const resetRef = React.useRef(() => {});
@@ -112,6 +116,7 @@ export default function TreeGraphScreen({ route, navigation }) {
       const data = await fullTree(treeId);
       setPersons(data.persons);
       setRelationships(data.relationships);
+      setTreePrivacy(data.privacy);
       cacheSet(cacheKeys.fullTree(treeId), data);
     } catch (e) {
       if (isNetworkError(e)) {
@@ -130,10 +135,12 @@ export default function TreeGraphScreen({ route, navigation }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const { positions } = useMemo(
-    () => resolvePositions(persons, relationships),
-    [persons, relationships]
-  );
+  const positionsData = useMemo(
+  () => resolvePositions(persons, relationships),
+  [persons, relationships]
+);
+
+const positions = positionsData.positions;
   const bounds  = useMemo(() => canvasBounds(positions), [positions]);
   const canvasW = bounds.maxX - bounds.minX;
   const canvasH = bounds.maxY - bounds.minY;
@@ -226,22 +233,44 @@ export default function TreeGraphScreen({ route, navigation }) {
   activeTab={activeTab}
   onChange={setActiveTab}
 />
-      <OfflineBanner isOnline={isOnline} syncing={syncing} pendingCount={pendingCount} />
+      <OfflineBanner
+    isOnline={isOnline}
+    syncing={syncing}
+    pendingCount={pendingCount}
+/>
 
-      {Platform.OS === 'web' ? (
-        <WebCanvas canvasW={canvasW} canvasH={canvasH}>
-          {canvasContent}
-        </WebCanvas>
-      ) : (
-        <NativeCanvas
-          canvasW={canvasW}
-          canvasH={canvasH}
-          resetRef={resetRef}
-          zoomRef={zoomRef}
-        >
-          {canvasContent}
-        </NativeCanvas>
-      )}
+{activeTab === 'graph' && (
+  Platform.OS === 'web' ? (
+    <WebCanvas canvasW={canvasW} canvasH={canvasH}>
+      {canvasContent}
+    </WebCanvas>
+  ) : (
+    <NativeCanvas
+      canvasW={canvasW}
+      canvasH={canvasH}
+      resetRef={resetRef}
+      zoomRef={zoomRef}
+    >
+      {canvasContent}
+    </NativeCanvas>
+  )
+)}
+
+{activeTab === 'journal' && (
+  <AuditLogView treeId={treeId} />
+)}
+
+{activeTab === 'timeline' && (
+  <TimelineView treeId={treeId} />
+)}
+
+{activeTab === 'invites' && (
+  <InviteManager
+    treeId={treeId}
+    privacy={treePrivacy}
+    onPrivacyUpdated={setTreePrivacy}
+  />
+)}
 
       {persons.length === 0 && (
         <View style={styles.empty} pointerEvents="none">
@@ -289,11 +318,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.cream },
   center:    { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.cream },
   empty:     { position: 'absolute', top: '40%', left: 0, right: 0, alignItems: 'center' },
-  emptyTxt:  { color: colors.ink, opacity: 0.5, fontSize: 14, fontWeight: '600' },
-  emptyHint: { color: colors.ink, opacity: 0.35, fontSize: 12, marginTop: 6 },
-  zoom:      { position: 'absolute', right: 20, top: 180, gap: 8 },
+  emptyTxt:  { color: colors.ink, opacity: 0.5, fontSize: 14, fontFamily: 'Times',fontWeight: '600' },
+  emptyHint: { color: colors.ink, opacity: 0.35, fontFamily: 'Times',fontSize: 12, marginTop: 6 },
+  zoom:      { position: 'absolute', right: 20, top: 250, gap: 8 },
   zoomBtn:   { width: 35, height: 35, borderRadius: radii.pill, backgroundColor: colors.creamLight, borderWidth: 1, borderColor: colors.creamBorder, alignItems: 'center', justifyContent: 'center' },
-  zoomTxt:   { fontSize: 18, fontWeight: '700', color: colors.ink },
+  zoomTxt:   { fontSize: 18, fontWeight: '700',fontFamily: 'Times', color: colors.ink },
   fab:       { position: 'absolute', bottom: 24, alignSelf: 'center', backgroundColor: colors.olive, paddingVertical: 13, paddingHorizontal: 22, borderRadius: radii.pill, elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4 },
-  fabTxt:    { color: colors.white, fontWeight: '700', fontSize: 14 },
+  fabTxt:    { color: colors.white, fontWeight: '700',fontFamily: 'Times', fontSize: 14 },
 });

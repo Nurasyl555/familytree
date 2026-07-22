@@ -23,7 +23,7 @@ const toForm = (p) => ({
 function Field({ label, style, ...props }) {
   return (
     <View style={{marginBottom:12}}>
-      <Text style={{fontSize:12.5,fontWeight:'600',color:colors.ink,opacity:0.75,marginBottom:5}}>{label}</Text>
+      <Text style={{fontFamily: 'Times',fontSize:12.5,fontWeight:'600',color:colors.ink,opacity:0.75,marginBottom:5}}>{label}</Text>
       <TextInput style={[{borderWidth:1,borderColor:colors.creamBorder,borderRadius:radii.sm,paddingHorizontal:12,paddingVertical:10,fontSize:14.5,color:colors.ink,backgroundColor:colors.white},style]}
         placeholderTextColor={colors.ink+'66'} {...props} />
     </View>
@@ -139,7 +139,7 @@ export default function PersonProfileScreen({ route, navigation }) {
             {saving && <View style={styles.avatarOvl}><ActivityIndicator color={colors.white}/></View>}
           </View>
           <View style={{flexDirection:'row',gap:8,marginTop:10}}>
-            {[[true,'📷 Камера'],[false,'🖼 Галерея']].map(([cam,lbl]) => (
+            {[[true,'📽 Камера'],[false,'🗁 Галерея']].map(([cam,lbl]) => (
               <TouchableOpacity key={lbl} style={styles.photoBtn} onPress={()=>pickPhoto(cam)}><Text style={styles.photoBtnTxt}>{lbl}</Text></TouchableOpacity>
             ))}
           </View>
@@ -147,11 +147,11 @@ export default function PersonProfileScreen({ route, navigation }) {
             <View style={{marginTop:14,alignItems:'center'}}>
               <Text style={styles.name}>{fullName(person)}</Text>
               <Text style={styles.meta}>{formatDate(person.birth_date)||'Дата рождения не указана'}{person.birth_place?` (${person.birth_place})`:''}</Text>
-              {person.death_date && <Text style={[styles.meta,{opacity:0.55,fontWeight:'600'}]}>Скончался(лась): {formatDate(person.death_date)}</Text>}
+              {person.death_date && <Text style={[styles.meta,{opacity:0.55,fontWeight:'600',fontFamily: 'Times',}]}>Скончался(лась): {formatDate(person.death_date)}</Text>}
               {person.bio && <Text style={styles.bio}>{person.bio}</Text>}
               <View style={styles.actRow}>
-                <TouchableOpacity style={styles.editBtn} onPress={()=>setEditing(true)}><Text style={{color:colors.white,fontWeight:'700',fontSize:13}}>Редактировать</Text></TouchableOpacity>
-                <TouchableOpacity style={{paddingVertical:10,paddingHorizontal:14}} onPress={handleDelPerson}><Text style={{color:colors.danger,fontWeight:'600',fontSize:13}}>Удалить</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.editBtn} onPress={()=>setEditing(true)}><Text style={{color:colors.white,fontWeight:'700',fontFamily: 'Times',fontSize:13}}>Редактировать</Text></TouchableOpacity>
+                <TouchableOpacity style={{paddingVertical:10,paddingHorizontal:14}} onPress={handleDelPerson}><Text style={{color:colors.danger,fontWeight:'600',fontFamily: 'Times',fontSize:13}}>Удалить</Text></TouchableOpacity>
               </View>
             </View>
           ) : (
@@ -176,13 +176,13 @@ export default function PersonProfileScreen({ route, navigation }) {
         </View>
 
         <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center',marginTop:22,marginBottom:10}}>
-          <Text style={{fontSize:15.5,fontWeight:'800',color:colors.ink}}>Хронология жизни</Text>
-          <TouchableOpacity onPress={()=>setShowAddEv(true)}><Text style={{color:colors.olive800,fontWeight:'700',fontSize:12.5}}>+ Событие</Text></TouchableOpacity>
+          <Text style={{fontFamily: 'Times',fontSize:15.5,fontWeight:'800',color:colors.ink}}>Хронология жизни</Text>
+          <TouchableOpacity onPress={()=>setShowAddEv(true)}><Text style={{color:colors.olive800,fontWeight:'700',fontSize:12.5,fontFamily: 'Times',}}>+ Событие</Text></TouchableOpacity>
         </View>
         {evLoading
           ? <ActivityIndicator color={colors.olive} style={{marginTop:12}}/>
           : events.length===0
-            ? <Text style={{color:colors.ink,opacity:0.5,fontSize:13,textAlign:'center',marginTop:10}}>Событий пока нет</Text>
+            ? <Text style={{color:colors.ink,opacity:0.5,fontSize:13,fontFamily: 'Times',textAlign:'center',marginTop:10}}>Событий пока нет</Text>
             : events.map(ev => <LifeEventItem key={ev.id} event={ev} onDelete={()=>handleDelEvent(ev.id)}/>)
         }
       </ScrollView>
@@ -195,13 +195,13 @@ const styles = StyleSheet.create({
   card:      {backgroundColor:colors.creamLight,borderRadius:radii.lg,borderWidth:1,borderColor:colors.creamBorder,padding:18,alignItems:'center',...shadow},
   avatar:    {width:88,height:88,borderRadius:radii.pill,borderWidth:2,borderColor:colors.creamBorder},
   avatarFb:  {width:88,height:88,borderRadius:radii.pill,backgroundColor:colors.olive100,alignItems:'center',justifyContent:'center'},
-  initials:  {fontWeight:'800',fontSize:24,color:colors.ink},
+  initials:  {fontSize:24,fontFamily: 'Times',color:colors.ink},
   avatarOvl: {...StyleSheet.absoluteFillObject,borderRadius:radii.pill,backgroundColor:'rgba(44,44,36,0.4)',alignItems:'center',justifyContent:'center'},
-  photoBtn:  {backgroundColor:colors.creamDark,borderRadius:radii.pill,paddingHorizontal:12,paddingVertical:6},
-  photoBtnTxt:{fontSize:11.5,fontWeight:'600',color:colors.ink},
-  name:      {fontSize:19,fontWeight:'800',color:colors.ink},
-  meta:      {fontSize:12.5,color:colors.ink,opacity:0.7,textAlign:'center',marginTop:6},
-  bio:       {fontSize:13.5,color:colors.ink,opacity:0.85,marginTop:12,lineHeight:19,textAlign:'center'},
+  photoBtn:  {backgroundColor:colors.creamDark,fontFamily: 'Times',borderRadius:radii.pill,paddingHorizontal:12,paddingVertical:6},
+  photoBtnTxt:{fontSize:11.5,fontWeight:'1',color:colors.ink,fontFamily: 'Times'},
+  name:      {fontSize:19,fontFamily: 'Times',color:colors.ink},
+  meta:      {fontSize:12.5,color:colors.ink,opacity:0.7,textAlign:'center',marginTop:6,fontFamily: 'Times'},
+  bio:       {fontSize:13.5,color:colors.ink,opacity:0.85,marginTop:12,lineHeight:19,textAlign:'center',fontFamily: 'Times'},
   actRow:    {flexDirection:'row',justifyContent:'center',gap:10,marginTop:16,width:'100%'},
-  editBtn:   {backgroundColor:colors.olive,borderRadius:radii.sm,paddingVertical:10,paddingHorizontal:18},
+  editBtn:   {backgroundColor:colors.olive,borderRadius:radii.sm,paddingVertical:10,paddingHorizontal:18,fontFamily: 'Times',},
 });

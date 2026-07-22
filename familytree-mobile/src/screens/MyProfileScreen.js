@@ -202,6 +202,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
 
     marginBottom: 24,
+    fontFamily: 'Times',
   },
 
   label: {
@@ -210,6 +211,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
 
     fontSize: 14,
+    fontFamily: 'Times',
 
     fontWeight: '600',
 
@@ -230,6 +232,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
 
     fontSize: 15,
+    fontFamily: 'Times',
 
     color: colors.ink,
   },
@@ -254,5 +257,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
 
     fontSize: 16,
+    fontFamily: 'Times',
   },
 });

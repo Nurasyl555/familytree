@@ -9,13 +9,15 @@ import {
 import { colors, radii } from '../theme/theme';
 
 const TABS = [
-  'members',
+  'graph',
+  'timeline',
   'journal',
   'invites',
 ];
 
 const LABELS = {
-  members: 'Участники',
+  graph: 'Участники',
+  timeline: 'Хронология',
   journal: 'Журнал',
   invites: 'Приглашения',
 };
@@ -103,6 +105,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
 
     fontWeight: '600',
+    fontFamily: 'Times',
 
     color: colors.ink,
 
@@ -113,6 +116,7 @@ const styles = StyleSheet.create({
     color: colors.white,
 
     opacity: 1,
+    fontFamily: 'Times',
 
     fontWeight: '700',
   },

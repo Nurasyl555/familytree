@@ -18,9 +18,9 @@ export default function TreeCard({ tree, onPress, onDelete }) {
 const styles = StyleSheet.create({
   card:     { backgroundColor:colors.creamLight, borderRadius:radii.lg, borderWidth:1, borderColor:colors.creamBorder, padding:16, marginBottom:12, ...shadow },
   icon:     { width:40, height:40, borderRadius:radii.pill, backgroundColor:colors.olive100, alignItems:'center', justifyContent:'center', marginBottom:10 },
-  name:     { fontSize:17, fontWeight:'700', color:colors.ink, marginBottom:8 },
+  name:     { fontSize:17, fontWeight:'700', color:colors.ink, marginBottom:8 ,fontFamily: 'Times',},
   pill:     { alignSelf:'flex-start', backgroundColor:colors.creamDark, borderRadius:radii.pill, paddingHorizontal:10, paddingVertical:3 },
-  pillText: { fontSize:11.5, fontWeight:'600', color:colors.ink, opacity:0.7 },
+  pillText: { fontSize:11.5, fontWeight:'600', color:colors.ink, opacity:0.7,fontFamily: 'Times', },
   del:      { marginTop: 12, alignSelf: 'flex-start',borderWidth: 1,borderColor: colors.danger, borderRadius: 15,paddingHorizontal: 16, paddingVertical: 10, alignItems: 'center', justifyContent: 'center'},
-  delText:  { color:colors.danger, fontSize:12.5, fontWeight:'600' },
+  delText:  { color:colors.danger, fontSize:12.5, fontWeight:'600',fontFamily: 'Times', },
 });

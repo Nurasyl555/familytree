@@ -272,9 +272,10 @@ class FamilyTreeViewSet(viewsets.ModelViewSet):
         relationships = tree.relationships.all()
 
         return Response({
-            'persons': PersonSerializer(persons, many=True).data,
-            'relationships': RelationshipSerializer(relationships, many=True).data,
-        })
+    'persons': PersonSerializer(persons, many=True).data,
+    'relationships': RelationshipSerializer(relationships, many=True).data,
+    'privacy': tree.privacy,
+})
 
     @action(detail=True, methods=['get'])
     def timeline(self, request, pk=None):
