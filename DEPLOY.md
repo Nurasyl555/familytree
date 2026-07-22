@@ -9,9 +9,10 @@
 `redis` (не используется в коде, про запас), `backend` (Django + gunicorn) и `frontend` (React,
 собран и отдаётся через nginx, который же проксирует `/api/*` и `/media/*` на `backend`).
 
-Перед первым запуском нужен `familytree-backend/.env` (см. `familytree-backend/SETUP_LOCAL.md`,
-шаг 3) — оттуда backend-контейнер берёт `SECRET_KEY`. Значения `DB_*` в `.env` не важны для Docker:
-compose сам подставляет контейнерные (`DB_HOST=db` и т.п.), не трогая ваш `.env`.
+Перед первым запуском нужен `familytree-backend/.env` — скопируйте `familytree-backend/.env.example`
+(см. также `familytree-backend/SETUP_LOCAL.md`, шаг 3), оттуда backend-контейнер берёт `SECRET_KEY`.
+Значения `DB_*` в `.env` не важны для Docker: compose сам подставляет контейнерные (`DB_HOST=db`
+и т.п.), не трогая ваш `.env`.
 
 ```bash
 docker compose up -d --build
@@ -45,9 +46,10 @@ docker compose logs -f backend
 
 ### Шаг 2 — backend (Render)
 
-1. New → Web Service → подключить GitHub-репозиторий, Root Directory: `familytree-backend`,
-   Render сам увидит `Dockerfile`.
-2. Environment → добавить переменные:
+1. New → Web Service → подключить GitHub-репозиторий.
+2. **Docker Build Context Directory**: `familytree-backend`. **Dockerfile Path**:
+   `familytree-backend/Dockerfile` (Root Directory при этом оставьте пустым).
+3. Environment → добавить переменные:
    ```
    SECRET_KEY=<сгенерировать заново, не тот что в dev .env>
    DEBUG=False
@@ -55,36 +57,43 @@ docker compose logs -f backend
    CORS_ALLOWED_ORIGINS=https://<ваш-frontend>.vercel.app
    CSRF_TRUSTED_ORIGINS=https://<ваш-frontend>.vercel.app
    DB_NAME=... DB_USER=... DB_PASSWORD=... DB_HOST=... DB_PORT=5432   # из строки подключения Neon
+   DB_SSLMODE=require    # Neon требует SSL, локальный Postgres — нет (там дефолт 'prefer')
    ```
-3. Deploy. Render соберёт образ, `command` в `docker-compose.yml` не используется — на Render команду
-   запуска задаёте отдельно в его UI: `python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT`
-   (Render сам назначает `$PORT`, не обязательно 8000).
+   `ALLOWED_HOSTS` можно заполнить только *после* первого деплоя — Render сам генерирует домен
+   (например `familytree-jxp0.onrender.com`), заранее угадать его нельзя. Первый деплой можно
+   запустить с заглушкой, поправить `ALLOWED_HOSTS` и передеплоить, когда узнаете реальный домен.
+4. **Health Check Path**: `/healthz/` — лёгкий эндпоинт без БД и без генерации Swagger-схемы.
+   *Не* используйте `/api/schema/`: `drf-spectacular` пересобирает всю OpenAPI-схему на каждый запрос,
+   на бесплатных 0.1 CPU это медленнее 5-секундного таймаута health-check, и Render убивает инстанс
+   в бесконечном цикле рестартов.
+5. **Docker Command** и **Pre-Deploy Command** оставьте пустыми. Миграции уже зашиты прямо в
+   `CMD` `Dockerfile`'а (`sh -c "python manage.py migrate --noinput && gunicorn ..."`) — специально
+   не через текстовое поле Render: `Docker Command` на free-тарифе не гарантированно шелл-парсит
+   составные команды (`&&`) и может упасть с `sh: ...: not found`, а `Pre-Deploy Command` вообще
+   недоступен на free-тарифе.
+6. Deploy.
 
-**Важная оговорка для бесплатного тарифа Render**: файловая система эфемерна — при каждом
-передеплое/засыпании сервиса содержимое `media/` (фото, сканы) стирается. Для учебного проекта это
-приемлемо; если нужно, чтобы фото переживали редеплой — Cloudflare R2 (бесплатно до 10GB) плюс
-`django-storages`, но это уже отдельная доработка кода, не входит в текущий деплой.
-
-Также free-тариф Render засыпает после ~15 минут без запросов и просыпается по первому запросу
+Free-тариф Render засыпает после ~15 минут без запросов и просыпается по первому запросу
 (10–50 секунд на «холодный старт») — нормально для пет-проекта, не для продакшена с реальными
-пользователями.
+пользователями. Файловая система тоже эфемерна — если нужно, чтобы фото переживали передеплой,
+понадобится объектное хранилище (Cloudflare R2 + `django-storages`) — отдельная доработка, не входит
+в этот деплой.
 
 ### Шаг 3 — frontend (Vercel)
 
-1. New Project → тот же репозиторий, Root Directory: `familytree-frontend`.
-2. Build command: `npm run build`, Output directory: `dist` (Vercel обычно определяет сам по
-   `vite.config.js`).
-3. Environment Variables → `VITE_API_URL=https://<ваш-backend>.onrender.com/api`. `src/api/client.js`
+1. New Project → тот же репозиторий, Root Directory: `familytree-frontend`, Application Preset: Vite.
+2. Environment Variables → `VITE_API_URL=https://<ваш-backend>.onrender.com/api`. `src/api/client.js`
    уже это учитывает: без переменной берётся относительный `/api` (для Docker/dev, где фронт и бэк на
    одном origin), с переменной — абсолютный URL (нужен, когда фронт и бэк на *разных* доменах, как
    тут).
-4. **Оговорка про фото**: `Person.photo`/`Media.file`/`LifeEvent.attachment` бэкенд отдаёт как
-   *относительный* путь (`/media/...`), рассчитанный на то, что дальше стоит прокси на том же origin
-   (nginx-контейнер или Vite dev-прокси). При раздельных доменах (Vercel+Render) браузер будет
-   пытаться загрузить фото с домена *фронтенда*, а не бэкенда — картинки не отобразятся. Это не
-   мешает регистрации/дереву/хронологии работать, но фото будут битые, пока сериализаторы не станут
-   отдавать абсолютные URL (`context={'request': request}` в `PersonSerializer`/`MediaSerializer` и
-   т.д.) — при таком сценарии деплоя это стоит доделать отдельным шагом.
+3. Deploy, скопируйте выданный домен (Domains → тот, что помечен как основной, не служебный
+   `*-<hash>-<team>.vercel.app`).
+4. Вернитесь в Render → Environment → впишите реальный домен фронтенда в `CORS_ALLOWED_ORIGINS`
+   (и `CSRF_TRUSTED_ORIGINS`) — сохранение переменной сам запускает передеплой.
+
+Фото/сканы (`Person.photo`, `Media.file`, `LifeEvent.attachment`) отдаются **абсолютным** URL
+(DRF строит его из заголовка запроса), так что с раздельными доменами Vercel+Render всё работает
+из коробки — специальных доработок сериализаторов не нужно.
 
 ### Итог
 
