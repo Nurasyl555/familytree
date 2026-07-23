@@ -73,7 +73,10 @@ export default function InviteManager({ treeId, privacy, onPrivacyUpdated }) {
     setSubmitting(true)
     try {
       const data = await generateInvite(treeId, { role, email: '' })
-      setInviteLink(`${window.location.origin}/invite/${data.token}`)
+      // BASE_URL — это то же значение, что и Vite base/router basename (см. vite.config.js,
+      // App.jsx): '/' локально и на Vercel, '/familytree/' на esg.kbtu.kz. Без него ссылка на
+      // сервере с префиксом пути вела бы на несуществующий /invite/... в корне домена.
+      setInviteLink(`${window.location.origin}${import.meta.env.BASE_URL}invite/${data.token}`)
     } catch {
       setError(t('invite.generateError'))
     } finally {
